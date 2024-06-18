@@ -11,5 +11,5 @@ default resources_created := false
 
 # Limit this to 8 creations on a single run
 resources_created if {
-    count(creates) > 8
+    count(creates) > 6
 }
