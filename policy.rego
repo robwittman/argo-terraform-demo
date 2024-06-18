@@ -8,5 +8,5 @@ import input.resource_changes
 creates := [res | res:=resource_changes[_]; res.change.actions[_] == "create"]
 
 resources_created if {
-    count(creates) > 0
+    count(creates) == 0
 }
