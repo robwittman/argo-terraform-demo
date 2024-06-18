@@ -9,5 +9,5 @@ creates := [res | res:=resource_changes[_]; res.change.actions[_] == "create"]
 
 default resources_created := true
 resources_created if {
-    count(creates) < 10
+    count(creates) < 5
 }
