@@ -1,0 +1,80 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  annotations:
+    workflows.argoproj.io/description: This workflow run a basic Terraform plan.
+    workflows.argoproj.io/maintainer: '@descrepes'
+    workflows.argoproj.io/tags: terraform
+    workflows.argoproj.io/version: '>= 2.9.0'
+  name: terraform-basic
+  namespace: argo
+spec:
+  entrypoint: update
+  arguments:
+    parameters:
+    - name: terraform-docker-image
+      value: "terraform"
+    - name: terraform-script-repository
+      value: "https://github.com/robwittman/argo-terraform-demo"
+    - name: terraform-version
+      value: 1.8.5
+  templates:
+    - name: plan
+      inputs:
+        artifacts:
+        - name: terraform
+          path: /home/terraform
+          git:
+            repo: "{{workflow.parameters.terraform-script-repository}}"
+            depth: 1
+      script:
+        imagePullPolicy: "Never"
+        image: "{{workflow.parameters.terraform-docker-image}}"
+        command: ["sh"]
+        source: |
+          cd /home/terraform
+          hc-install install --version 1.8.5 terraform
+
+          /go/terraform init -input=false 
+          /go/terraform plan -parallelism=2 -input=false -no-color -json
+      outputs:
+        artifacts:
+          - name: terraform-plan
+            path: /home/argo/
+            archive:
+              none: {}
+
+    - name: apply
+      inputs:
+        artifacts:
+        - name: terraform-plan
+          path: /home/terraform
+      script:
+        imagePullPolicy: "Always"
+        image: "{{workflow.parameters.terraform-docker-image}}"
+        command: ["sh"]
+        source: |
+          hc-install install --version 1.8.5 terraform
+          /go/terraform apply -input=false -parallelism=2 -no-color /home/terraform/tfclientsplan
+
+    - name: approve
+      suspend: {}
+
+    - name: update
+      dag:
+        tasks:
+          - name: plan
+            template: plan
+          - name: approve
+            dependencies: [plan]
+            template: approve
+          - name: apply
+            template: apply
+            dependencies: [plan, approve]
+            arguments:
+              artifacts:
+              - name: terraform-plan
+                from: "{{tasks.plan.outputs.artifacts.terraform-plan}}"
+
+
+
