@@ -1,80 +1,149 @@
-apiVersion: argoproj.io/v1alpha1
-kind: WorkflowTemplate
 metadata:
+  name: terraform-basic
+  namespace: argo
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-argo-server
   annotations:
     workflows.argoproj.io/description: This workflow run a basic Terraform plan.
     workflows.argoproj.io/maintainer: '@descrepes'
     workflows.argoproj.io/tags: terraform
     workflows.argoproj.io/version: '>= 2.9.0'
-  name: terraform-basic
-  namespace: argo
 spec:
-  entrypoint: update
-  arguments:
-    parameters:
-    - name: terraform-docker-image
-      value: "terraform"
-    - name: terraform-script-repository
-      value: "https://github.com/robwittman/argo-terraform-demo"
-    - name: terraform-version
-      value: 1.8.5
   templates:
     - name: plan
       inputs:
         artifacts:
-        - name: terraform
-          path: /home/terraform
-          git:
-            repo: "{{workflow.parameters.terraform-script-repository}}"
-            depth: 1
-      script:
-        imagePullPolicy: "Never"
-        image: "{{workflow.parameters.terraform-docker-image}}"
-        command: ["sh"]
-        source: |
-          cd /home/terraform
-          hc-install install --version 1.8.5 terraform
-
-          /go/terraform init -input=false 
-          /go/terraform plan -parallelism=2 -input=false -no-color -json
+          - name: terraform
+            path: /home/terraform
+            git:
+              repo: '{{workflow.parameters.terraform-script-repository}}'
+              depth: 1
       outputs:
         artifacts:
           - name: terraform-plan
             path: /home/argo/
             archive:
               none: {}
+      metadata: {}
+      script:
+        name: ''
+        image: '{{workflow.parameters.terraform-docker-image}}'
+        command:
+          - sh
+        resources: {}
+        imagePullPolicy: Never
+        source: >
+          mkdir /home/argo
 
+          cd /home/terraform
+
+          hc-install install --version 1.8.5 terraform
+
+          ./terraform init -input=false
+
+          ./terraform plan -parallelism=2 -input=false -no-color -json -out
+          /home/argo/tf.plan
+    - name: eval
+      inputs:
+        artifacts:
+          - name: terraform-plan
+            path: /home/argo/
+          - name: terraform
+            path: /home/terraform
+            git:
+              repo: '{{workflow.parameters.terraform-script-repository}}'
+              depth: 1
+      outputs: {}
+      metadata: {}
+      script:
+        name: ''
+        image: '{{workflow.parameters.terraform-docker-image}}'
+        command:
+          - sh
+        resources: {}
+        imagePullPolicy: Never
+        source: >-
+          cd /home/terraform
+
+          hc-install install --version 1.8.5 terraform
+
+          ./terraform init -input=false
+
+          ./terraform show -json /home/argo/tf.plan > tfplan.json
+
+          /go/opa exec --decision terraform/analysis/authz --log-level debug
+          --bundle . tfplan.json
     - name: apply
       inputs:
         artifacts:
-        - name: terraform-plan
-          path: /home/terraform
+          - name: terraform-plan
+            path: /home/argo/
+          - name: terraform
+            path: /home/terraform
+            git:
+              repo: '{{workflow.parameters.terraform-script-repository}}'
+              depth: 1
+      outputs: {}
+      metadata: {}
       script:
-        imagePullPolicy: "Always"
-        image: "{{workflow.parameters.terraform-docker-image}}"
-        command: ["sh"]
-        source: |
+        name: ''
+        image: '{{workflow.parameters.terraform-docker-image}}'
+        command:
+          - sh
+        resources: {}
+        imagePullPolicy: Never
+        source: >
+          cd /home/terraform
+
           hc-install install --version 1.8.5 terraform
-          /go/terraform apply -input=false -parallelism=2 -no-color /home/terraform/tfclientsplan
 
+          ./terraform init -input=false
+
+          ./terraform apply -input=false -parallelism=2 -no-color -auto-approve
+          /home/argo/tf.plan
     - name: approve
+      inputs: {}
+      outputs: {}
+      metadata: {}
       suspend: {}
-
     - name: update
+      inputs: {}
+      outputs: {}
+      metadata: {}
       dag:
         tasks:
           - name: plan
             template: plan
-          - name: approve
-            dependencies: [plan]
-            template: approve
-          - name: apply
-            template: apply
-            dependencies: [plan, approve]
+            arguments: {}
+          - name: eval
+            template: eval
             arguments:
               artifacts:
-              - name: terraform-plan
-                from: "{{tasks.plan.outputs.artifacts.terraform-plan}}"
-
-
-
+                - name: terraform-plan
+                  from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
+            dependencies:
+              - plan
+          - name: approve
+            template: approve
+            arguments: {}
+            dependencies:
+              - plan
+              - eval
+          - name: apply
+            template: apply
+            arguments:
+              artifacts:
+                - name: terraform-plan
+                  from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
+            dependencies:
+              - plan
+              - approve
+  entrypoint: update
+  arguments:
+    parameters:
+      - name: terraform-docker-image
+        value: terraform
+      - name: terraform-script-repository
+        value: https://github.com/robwittman/argo-terraform-demo
+      - name: terraform-version
+        value: 1.8.5
