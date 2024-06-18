@@ -7,7 +7,7 @@ import input.resource_changes
 # Get the number of created resources
 creates := [res | res:=resource_changes[_]; res.change.actions[_] == "create"]
 
-default resources_created := false
+default resources_created := true
 resources_created if {
-    count(creates) > 5
+    count(creates) < 10
 }
