@@ -36,3 +36,7 @@ resource "helm_release" "echo_server" {
   version    = "0.5.0"
   repository = "https://ealenn.github.io/charts/"
 }
+
+resource "random_string" "suffix" {
+  length = 5
+}
