@@ -31,7 +31,7 @@ provider "helm" {
 
 resource "helm_release" "echo_server" {
   name       = "echo-server"
-  namespace  = var.region
+  namespace  = kubernetes_namespace.namespace.metadata.name
   chart      = "echo-server"
   version    = "0.5.0"
   repository = "https://ealenn.github.io/charts/"
