@@ -24,7 +24,9 @@ spec:
       - name: opa-enforcement-level
         # Can be set to one of mandatory or advisory
         value: mandatory
-      - name: terraform-args
+      - name: terraform-init-args
+        value: ""
+      - name: terraform-run-args
         value: ""
   templates:
     - name: plan
@@ -51,16 +53,16 @@ spec:
         imagePullPolicy: Never
         source: >
           set +x
+          
           mkdir /home/argo
 
           cd /home/terraform
 
-          hc-install install --version 1.8.5 terraform
+          hc-install install --version 1.8.5 --path /usr/bin/ terraform
 
-          ./terraform init {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -input=false
+          terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
 
-          ./terraform plan {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -parallelism=2 -input=false -no-color -json -out
-          /home/argo/tf.plan
+          terraform -chdir={{workflow.parameters.terraform-directory}} plan {{workflow.parameters.terraform-run-args}} -parallelism=2 -input=false -no-color -json -out /home/argo/tf.plan
     - name: eval
       inputs:
         artifacts:
@@ -87,11 +89,13 @@ spec:
         source: >-
           cd /home/terraform
           
-          hc-install install --version 1.8.5 terraform
+          hc-install install --version 1.8.5 --path /usr/bin/ terraform
           
-          ./terraform init {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -input=false
+          terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
           
-          ./terraform show {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -json /home/argo/tf.plan > tfplan.json
+          terraform -chdir={{workflow.parameters.terraform-directory}} show -json /home/argo/tf.plan > tfplan.json
+          
+          cat tfplan.json
           
           /go/opa eval --format pretty --bundle policy/ -i tfplan.json data.terraform.deny > eval.json
 
@@ -117,11 +121,11 @@ spec:
         source: >
           cd /home/terraform
 
-          hc-install install --version 1.8.5 terraform
+          hc-install install --version 1.8.5 --path /usr/bin/ terraform
 
-          ./terraform init {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -input=false
+          terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
 
-          ./terraform apply {{workflow.parameters.terraform-args}} -chdir '{{workflow.parameters.terraform-directory}}' -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
+          terraform -chdir={{workflow.parameters.terraform-directory}} apply {{workflow.parameters.terraform-run-args}} -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
     - name: approve
       inputs: {}
       outputs: {}
