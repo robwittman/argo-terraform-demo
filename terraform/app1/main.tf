@@ -38,5 +38,5 @@ resource "helm_release" "echo_server" {
 }
 
 resource "random_string" "suffix" {
-  length = 5
+  length = 24
 }
