@@ -1,5 +1,6 @@
+kind: WorkflowTemplate
 metadata:
-  name: terraform-with-opa-override
+  name: terraform-basic
   namespace: argo
   labels:
     workflows.argoproj.io/creator: system-serviceaccount-argo-argo-server
@@ -8,19 +9,6 @@ metadata:
     workflows.argoproj.io/tags: terraform
     workflows.argoproj.io/version: '>= 2.9.0'
 spec:
-  arguments:
-    parameters:
-      - name: terraform-docker-image
-        value: terraform
-      - name: terraform-script-repository
-        value: https://github.com/robwittman/argo-terraform-demo
-      - name: terraform-version
-        value: 1.8.5
-      - name: opa-query
-        value: data.terraform.deny
-      - name: opa-enforcement-level
-        # Can be set to one of mandatory or advisory
-        value: mandatory
   templates:
     - name: plan
       inputs:
@@ -53,8 +41,7 @@ spec:
 
           ./terraform init -input=false
 
-          ./terraform plan -parallelism=2 -input=false -no-color -json -out
-          /home/argo/tf.plan
+          ./terraform plan -parallelism=2 -input=false -no-color -json -out /home/argo/tf.plan
     - name: eval
       inputs:
         artifacts:
@@ -65,11 +52,7 @@ spec:
             git:
               repo: '{{workflow.parameters.terraform-script-repository}}'
               depth: 1
-      outputs:
-        parameters:
-          - name: policy-evaluation  # name of output parameter
-            valueFrom:
-              path: eval.json
+      outputs: {}
       metadata: {}
       script:
         name: ''
@@ -80,11 +63,14 @@ spec:
         imagePullPolicy: Never
         source: >-
           cd /home/terraform
-          hc-install install --version 1.8.5 terraform
-          ./terraform init -input=false
-          ./terraform show -json /home/argo/tf.plan > tfplan.json
-          /go/opa eval --format pretty --bundle policy/ -i tfplan.json data.terraform.deny > eval.json
 
+          hc-install install --version 1.8.5 terraform
+
+          ./terraform init -input=false
+
+          ./terraform show -json /home/argo/tf.plan > tfplan.json
+
+          /go/opa exec --decision terraform/analysis/resources_created --log-level debug --fail --bundle . tfplan.json
     - name: apply
       inputs:
         artifacts:
@@ -111,8 +97,7 @@ spec:
 
           ./terraform init -input=false
 
-          ./terraform apply -input=false -parallelism=2 -no-color -auto-approve
-          /home/argo/tf.plan
+          ./terraform apply -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
     - name: approve
       inputs: {}
       outputs: {}
@@ -135,21 +120,12 @@ spec:
                   from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
             dependencies:
               - plan
-          - name: override
+          - name: approve
             template: approve
-            when: "{{tasks.eval.outputs.parameters.policy-evaluation}} != []"
-            dependencies:
-              - eval
-          - name: approve-plan
-            template: approve
-            arguments:
-              artifacts:
-                - name: terraform-plan
-                  from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
+            arguments: {}
             dependencies:
               - plan
               - eval
-              - override
           - name: apply
             template: apply
             arguments:
@@ -158,7 +134,13 @@ spec:
                   from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
             dependencies:
               - plan
-              - eval
-              - override
-              - approve-plan
+              - approve
   entrypoint: update
+  arguments:
+    parameters:
+      - name: terraform-docker-image
+        value: terraform
+      - name: terraform-script-repository
+        value: https://github.com/robwittman/argo-terraform-demo
+      - name: terraform-version
+        value: 1.8.5

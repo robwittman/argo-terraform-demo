@@ -1,0 +1,58 @@
+kind: WorkflowTemplate
+metadata:
+  name: terraform-multi-region
+  namespace: argo
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-argo-server
+  annotations:
+    workflows.argoproj.io/description: This workflow run a basic Terraform plan.
+    workflows.argoproj.io/tags: terraform
+    workflows.argoproj.io/version: '>= 2.9.0'
+spec:
+  arguments:
+    parameters:
+      - name: terraform-docker-image
+        value: terraform
+      - name: terraform-script-repository
+        value: https://github.com/robwittman/argo-terraform-demo
+      - name: terraform-working-directory
+        value: terraform
+      - name: terraform-version
+        value: 1.8.5
+  templates:
+    - name: loop-example
+      steps:
+        - - name: deploy
+            template: deploy-region
+            arguments:
+              parameters:
+                - name: region
+                  value: "{{item}}"
+            withItems:
+              - us-east-1
+              - us-east-2
+              - us-west-1
+              - us-west-2
+
+    - name: deploy-region
+      inputs:
+        parameters:
+          - name: region
+      resource:
+        action: create
+        # This submits a child workflow, which will run as its own independent workflow in Argo.
+        manifest: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            generateName: child-
+          spec:
+            arguments:
+              parameters:
+              - name: terraform-args
+                value: "-backend-config=\"secret_suffix={{inputs.parameters.region}}\" -var \"region={{inputs.parameters.region}}\""
+            workflowTemplateRef:
+              name: terraform-with-opa-override
+              successCondition: status.phase == Succeeded
+              failureCondition: status.phase in (Failed, Error)
+  entrypoint: loop-example

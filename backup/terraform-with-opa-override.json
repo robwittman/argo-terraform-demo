@@ -1,0 +1,260 @@
+{
+  "metadata": {
+    "name": "terraform-with-opa-override",
+    "namespace": "argo",
+    "uid": "ad685bf7-dd15-46d2-9c2c-e5bc7ad2cf06",
+    "resourceVersion": "17956",
+    "generation": 6,
+    "creationTimestamp": "2024-06-19T02:45:35Z",
+    "labels": {
+      "workflows.argoproj.io/creator": "system-serviceaccount-argo-argo-server"
+    },
+    "annotations": {
+      "workflows.argoproj.io/description": "This workflow run a basic Terraform plan.",
+      "workflows.argoproj.io/tags": "terraform",
+      "workflows.argoproj.io/version": ">= 2.9.0"
+    },
+    "managedFields": [
+      {
+        "manager": "argo",
+        "operation": "Update",
+        "apiVersion": "argoproj.io/v1alpha1",
+        "time": "2024-06-19T02:54:11Z",
+        "fieldsType": "FieldsV1",
+        "fieldsV1": {
+          "f:metadata": {
+            "f:annotations": {
+              ".": {},
+              "f:workflows.argoproj.io/description": {},
+              "f:workflows.argoproj.io/tags": {},
+              "f:workflows.argoproj.io/version": {}
+            },
+            "f:labels": {
+              ".": {},
+              "f:workflows.argoproj.io/creator": {}
+            }
+          },
+          "f:spec": {}
+        }
+      }
+    ]
+  },
+  "spec": {
+    "templates": [
+      {
+        "name": "plan",
+        "inputs": {
+          "artifacts": [
+            {
+              "name": "terraform",
+              "path": "/home/terraform",
+              "git": {
+                "repo": "{{workflow.parameters.terraform-script-repository}}",
+                "depth": 1
+              }
+            }
+          ]
+        },
+        "outputs": {
+          "artifacts": [
+            {
+              "name": "terraform-plan",
+              "path": "/home/argo/",
+              "archive": {
+                "none": {}
+              }
+            }
+          ]
+        },
+        "metadata": {},
+        "script": {
+          "name": "",
+          "image": "{{workflow.parameters.terraform-docker-image}}",
+          "command": [
+            "sh"
+          ],
+          "resources": {},
+          "imagePullPolicy": "Never",
+          "source": "mkdir /home/argo\ncd /home/terraform\nhc-install install --version 1.8.5 terraform\n./terraform init -input=false\n./terraform plan -parallelism=2 -input=false -no-color -json -out /home/argo/tf.plan\n"
+        }
+      },
+      {
+        "name": "eval",
+        "inputs": {
+          "artifacts": [
+            {
+              "name": "terraform-plan",
+              "path": "/home/argo/"
+            },
+            {
+              "name": "terraform",
+              "path": "/home/terraform",
+              "git": {
+                "repo": "{{workflow.parameters.terraform-script-repository}}",
+                "depth": 1
+              }
+            }
+          ]
+        },
+        "outputs": {
+          "parameters": [
+            {
+              "name": "policy-evaluation",
+              "valueFrom": {
+                "path": "/home/terraform/eval.json"
+              }
+            }
+          ]
+        },
+        "metadata": {},
+        "script": {
+          "name": "",
+          "image": "{{workflow.parameters.terraform-docker-image}}",
+          "command": [
+            "sh"
+          ],
+          "resources": {},
+          "imagePullPolicy": "Never",
+          "source": "cd /home/terraform \nhc-install install --version 1.8.5 terraform\n./terraform init -input=false\n./terraform show -json /home/argo/tf.plan > tfplan.json\n/go/opa eval --format pretty --bundle policy/ -i tfplan.json data.terraform.deny > eval.json"
+        }
+      },
+      {
+        "name": "apply",
+        "inputs": {
+          "artifacts": [
+            {
+              "name": "terraform-plan",
+              "path": "/home/argo/"
+            },
+            {
+              "name": "terraform",
+              "path": "/home/terraform",
+              "git": {
+                "repo": "{{workflow.parameters.terraform-script-repository}}",
+                "depth": 1
+              }
+            }
+          ]
+        },
+        "outputs": {},
+        "metadata": {},
+        "script": {
+          "name": "",
+          "image": "{{workflow.parameters.terraform-docker-image}}",
+          "command": [
+            "sh"
+          ],
+          "resources": {},
+          "imagePullPolicy": "Never",
+          "source": "cd /home/terraform\nhc-install install --version 1.8.5 terraform\n./terraform init -input=false\n./terraform apply -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan\n"
+        }
+      },
+      {
+        "name": "approve",
+        "inputs": {},
+        "outputs": {},
+        "metadata": {},
+        "suspend": {}
+      },
+      {
+        "name": "update",
+        "inputs": {},
+        "outputs": {},
+        "metadata": {},
+        "dag": {
+          "tasks": [
+            {
+              "name": "plan",
+              "template": "plan",
+              "arguments": {}
+            },
+            {
+              "name": "eval",
+              "template": "eval",
+              "arguments": {
+                "artifacts": [
+                  {
+                    "name": "terraform-plan",
+                    "from": "{{tasks.plan.outputs.artifacts.terraform-plan}}"
+                  }
+                ]
+              },
+              "dependencies": [
+                "plan"
+              ]
+            },
+            {
+              "name": "override",
+              "template": "approve",
+              "arguments": {},
+              "dependencies": [
+                "eval"
+              ],
+              "when": "{{tasks.eval.outputs.parameters.policy-evaluation}} != []"
+            },
+            {
+              "name": "approve-plan",
+              "template": "approve",
+              "arguments": {
+                "artifacts": [
+                  {
+                    "name": "terraform-plan",
+                    "from": "{{tasks.plan.outputs.artifacts.terraform-plan}}"
+                  }
+                ]
+              },
+              "dependencies": [
+                "plan",
+                "eval",
+                "override"
+              ]
+            },
+            {
+              "name": "apply",
+              "template": "apply",
+              "arguments": {
+                "artifacts": [
+                  {
+                    "name": "terraform-plan",
+                    "from": "{{tasks.plan.outputs.artifacts.terraform-plan}}"
+                  }
+                ]
+              },
+              "dependencies": [
+                "plan",
+                "eval",
+                "override",
+                "approve-plan"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "entrypoint": "update",
+    "arguments": {
+      "parameters": [
+        {
+          "name": "terraform-docker-image",
+          "value": "terraform"
+        },
+        {
+          "name": "terraform-script-repository",
+          "value": "https://github.com/robwittman/argo-terraform-demo"
+        },
+        {
+          "name": "terraform-version",
+          "value": "1.8.5"
+        },
+        {
+          "name": "opa-query",
+          "value": "data.terraform.deny"
+        },
+        {
+          "name": "opa-enforcement-level",
+          "value": "mandatory"
+        }
+      ]
+    }
+  }
+}
