@@ -2,7 +2,7 @@ package terraform
 
 import input as tfplan
 
-required_string_length := 24
+required_string_length := 38
 
 deny[reason] {
 	resource := tfplan.resource_changes[_]
