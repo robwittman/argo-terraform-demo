@@ -45,7 +45,7 @@ spec:
           apiVersion: argoproj.io/v1alpha1
           kind: Workflow
           metadata:
-            generateName: child-
+            generateName: child-{{inputs.parameters.region}}-
           spec:
             arguments:
               parameters:
@@ -53,6 +53,8 @@ spec:
                 value: "-backend-config=\"secret_suffix={{inputs.parameters.region}}-deploy\""
               - name: terraform-run-args
                 value: "-var \"region={{inputs.parameters.region}}\""
+              - name: terraform-auto-apply
+                value: "true"
             workflowTemplateRef:
               name: terraform-with-opa-override
               successCondition: status.phase == Succeeded

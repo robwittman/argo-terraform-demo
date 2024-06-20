@@ -28,6 +28,8 @@ spec:
         value: ""
       - name: terraform-run-args
         value: ""
+      - name: terraform-auto-apply
+        value: false
   templates:
     - name: plan
       inputs:
@@ -77,7 +79,7 @@ spec:
         parameters:
           - name: policy-evaluation  # name of output parameter
             valueFrom:
-              path: eval.json
+              path: /home/terraform/eval.json
       metadata: {}
       script:
         name: ''
@@ -86,6 +88,7 @@ spec:
           - sh
         resources: {}
         imagePullPolicy: Never
+        # TODO: OPA policy eval should be output, copying raw to bypass
         source: >-
           cd /home/terraform
           
@@ -125,7 +128,7 @@ spec:
 
           terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
 
-          terraform -chdir={{workflow.parameters.terraform-directory}} apply {{workflow.parameters.terraform-run-args}} -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
+          terraform -chdir={{workflow.parameters.terraform-directory}} apply -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
     - name: approve
       inputs: {}
       outputs: {}
@@ -159,6 +162,7 @@ spec:
               artifacts:
                 - name: terraform-plan
                   from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
+            when: "{{workflow.parameters.terraform-auto-apply}} != \"true\""
             dependencies:
               - plan
               - eval
