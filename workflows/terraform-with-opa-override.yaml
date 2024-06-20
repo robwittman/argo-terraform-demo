@@ -65,7 +65,7 @@ spec:
 
           terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
 
-          terraform -chdir={{workflow.parameters.terraform-directory}} plan {{workflow.parameters.terraform-run-args}} -parallelism=2 -input=false -no-color -json -out /home/argo/tf.plan
+          terraform -chdir={{workflow.parameters.terraform-directory}} plan {{workflow.parameters.terraform-run-args}} -parallelism=2 -input=false -out /home/argo/tf.plan
     - name: eval
       inputs:
         artifacts:
