@@ -19,6 +19,9 @@ variable "region" {
 resource "kubernetes_namespace" "namespace" {
   metadata {
     name = "deployment-${var.region}"
+    annotations = {
+      "other-denied-annotation-1": "deny-me"
+    }
   }
 }
 

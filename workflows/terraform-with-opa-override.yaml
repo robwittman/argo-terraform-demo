@@ -31,6 +31,7 @@ spec:
       - name: terraform-auto-apply
         value: false
   templates:
+    # TODO: Init should run in a separate step, and persist the initialized working directory
     - name: plan
       inputs:
         artifacts:
@@ -88,7 +89,6 @@ spec:
           - sh
         resources: {}
         imagePullPolicy: Never
-        # TODO: OPA policy eval should be output, copying raw to bypass
         source: >-
           cd /home/terraform
           
