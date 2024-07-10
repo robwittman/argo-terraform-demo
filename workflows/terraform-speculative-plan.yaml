@@ -1,6 +1,6 @@
 kind: WorkflowTemplate
 metadata:
-  name: terraform-with-opa-override
+  name: terraform-speculative-plan
   namespace: argo
   labels:
     workflows.argoproj.io/creator: system-serviceaccount-argo-argo-server
@@ -28,10 +28,7 @@ spec:
         value: ""
       - name: terraform-run-args
         value: ""
-      - name: terraform-auto-apply
-        value: false
   templates:
-    # TODO: Init should run in a separate step, and persist the initialized working directory
     - name: plan
       inputs:
         artifacts:
@@ -66,9 +63,7 @@ spec:
           - sh
         resources: {}
         imagePullPolicy: Never
-        source: >
-          set +x
-          
+        source: >          
           mkdir /home/argo
 
           cd /home/terraform
@@ -80,7 +75,7 @@ spec:
           terraform -chdir={{workflow.parameters.terraform-directory}} plan {{workflow.parameters.terraform-run-args}} -parallelism=2 -input=false -no-color -out /home/argo/tf.plan -detailed-exitcode > /home/argo/tfplan.txt
           
           echo $? > /home/argo/exit-code
-                    
+          
           cat /home/argo/exit-code
           
           terraform -chdir={{workflow.parameters.terraform-directory}} show -json /home/argo/tf.plan > /home/argo/tfplan.json
@@ -112,84 +107,5 @@ spec:
           cd /home/terraform    
           
           /go/opa eval --format pretty --bundle policy/ -i /home/argo/tfplan.json data.terraform.deny > /home/terraform/eval.json
-    - name: apply
-      inputs:
-        artifacts:
-          - name: terraform-plan
-            path: /home/argo/tf.plan
-          - name: terraform
-            path: /home/terraform
-            git:
-              repo: '{{workflow.parameters.terraform-script-repository}}'
-              depth: 1
-      outputs: {}
-      metadata: {}
-      script:
-        name: ''
-        image: '{{workflow.parameters.terraform-docker-image}}'
-        command:
-          - sh
-        resources: {}
-        imagePullPolicy: Never
-        source: >
-          cd /home/terraform
 
-          hc-install install --version 1.8.5 --path /usr/bin/ terraform
-
-          terraform -chdir={{workflow.parameters.terraform-directory}} init {{workflow.parameters.terraform-init-args}} -input=false
-
-          terraform -chdir={{workflow.parameters.terraform-directory}} apply -input=false -parallelism=2 -no-color -auto-approve /home/argo/tf.plan
-    - name: approve
-      inputs: {}
-      outputs: {}
-      metadata: {}
-      suspend: {}
-    - name: update
-      inputs: {}
-      outputs: {}
-      metadata: {}
-      dag:
-        tasks:
-          - name: plan
-            template: plan
-            arguments: {}
-          - name: eval
-            template: eval
-            arguments:
-              artifacts:
-                - name: terraform-plan-json
-                  from: '{{tasks.plan.outputs.artifacts.terraform-plan-json}}'
-            dependencies:
-              - plan
-            when: "{{tasks.plan.outputs.parameters.exit-code}} == 2"
-          - name: override
-            template: approve
-            when: >-
-              ( {{tasks.eval.outputs.parameters.policy-evaluation}} != [] && 
-                {{tasks.plan.outputs.parameters.exit-code}} == 2)
-            dependencies:
-              - eval
-          - name: approve-plan
-            template: approve
-            arguments:
-              artifacts:
-                - name: terraform-plan-structured
-                  from: '{{tasks.plan.outputs.artifacts.terraform-plan-structured}}'
-            when: >-
-              (
-                {{workflow.parameters.terraform-auto-apply}} != "true" &&
-                {{tasks.plan.outputs.parameters.exit-code}} == 2
-              )
-            dependencies:
-              - plan
-              - override
-          - name: apply
-            template: apply
-            when: "{{tasks.plan.outputs.parameters.exit-code}} == 2"
-            arguments:
-              artifacts:
-                - name: terraform-plan
-                  from: '{{tasks.plan.outputs.artifacts.terraform-plan}}'
-            dependencies:
-              - approve-plan
-  entrypoint: update
+    - name: 

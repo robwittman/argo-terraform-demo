@@ -1,0 +1,20 @@
+kind: WorkflowTemplate
+metadata:
+  name: terraform-plan-workflows
+  namespace: argo
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-argo-server
+  annotations:
+    workflows.argoproj.io/description: This workflow run a basic Terraform plan.
+    workflows.argoproj.io/tags: terraform
+    workflows.argoproj.io/version: '>= 2.9.0'
+spec:
+  arguments:
+    parameters: []
+  templates:
+    - name: plan
+      steps:
+        - - name: generate-artifact
+            templateRef:
+              name:
+              template: terraform-plan
