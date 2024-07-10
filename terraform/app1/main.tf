@@ -6,7 +6,9 @@ terraform {
   }
 
   # The secret suffix will be provided by Argo
-  backend "kubernetes" {}
+  backend "kubernetes" {
+    secret_suffix = "testing"
+  }
 }
 
 provider "kubernetes" {}
