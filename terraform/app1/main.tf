@@ -8,6 +8,7 @@ terraform {
   # The secret suffix will be provided by Argo
   backend "kubernetes" {
     secret_suffix = "testing"
+    namespace = "argo"
   }
 }
 
